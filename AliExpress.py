@@ -9,40 +9,51 @@ def fetch_package_updates(packages, output_file="packages_updates.json", show_on
     results = []
     total_packages = len(packages)
     found_updates = 0
-    arrived = 0
+    in_tunisia = 0
+    packages_in_tunisia = {"Ghazala": [], "Ariana": [], "Tunis": []}
 
     print(f"{total_packages} packages to check found\n")
 
     for idx, pkg in enumerate(packages, start=1):
-        pkg_number = pkg["package_number"]
+        pkg_number_original = pkg["package_number"]
         pkg_items = pkg.get("package orders", [])
 
-        print(f"Checking package n°{idx} : {pkg_number}")
+        print(f"Checking package n°{idx} : {pkg_number_original}")
 
-        url = base_url + pkg_number
-        try:
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
-        except requests.RequestException as e:
-            print(f"  ⚠ Error fetching {pkg_number}: {e}")
-            results.append({
-                "package_number": pkg_number,
-                "orders": pkg_items,
-                "updates": "error fetching page"
-            })
-            continue
+        pkg_numbers_to_try = [pkg_number_original]
+        if "/" in pkg_number_original:
+            pkg_numbers_to_try = pkg_number_original.split('/')
 
-        soup = BeautifulSoup(response.text, "html.parser")
-        table = soup.find("table", {"id": "200"})
+        soup = None
+        pkg_number = None
 
-        if not table:
+        for attempt in pkg_numbers_to_try:
+            url = base_url + attempt
+            try:
+                response = requests.get(url, timeout=10)
+                response.raise_for_status()
+                
+                temp_soup = BeautifulSoup(response.text, "html.parser")
+                if temp_soup.find("table", {"id": "200"}):
+                    soup = temp_soup
+                    pkg_number = attempt
+                    print(f"  → Found updates with {pkg_number}")
+                    break
+                else:
+                    print(f"  → No updates for {attempt}")
+            except requests.RequestException as e:
+                print(f"  ⚠ Error fetching {attempt}: {e}")
+        
+        if not soup:
             print("  → no package update\n")
             results.append({
-                "package_number": pkg_number,
+                "package_number": pkg_number_original,
                 "orders": pkg_items,
                 "updates": "no package update"
             })
             continue
+
+        table = soup.find("table", {"id": "200"})
 
         print("  → package updates found\n")
         found_updates += 1
@@ -70,13 +81,16 @@ def fetch_package_updates(packages, output_file="packages_updates.json", show_on
         location = ""
         if any("ghazala" in u["Lieu"].lower() for u in updates):
             location = "Ghazala"
-            arrived += 1
+            in_tunisia += 1
+            packages_in_tunisia[location].append(pkg_items)
         elif any("ariana" in u["Lieu"].lower() for u in updates):
             location = "Ariana"
-            arrived += 1
+            in_tunisia += 1
+            packages_in_tunisia[location].append(pkg_items)
         elif any("tunis" in u["Lieu"].lower() for u in updates):
             location = "Tunis"
-            arrived += 1
+            in_tunisia += 1
+            packages_in_tunisia[location].append(pkg_items)
         else:
             location = "on the way"
 
@@ -105,12 +119,15 @@ def fetch_package_updates(packages, output_file="packages_updates.json", show_on
     if show_only_updates:
         results = [res for res in results if res["updates"] != "no package update"]
 
-    print("\n","-"*50,"\n")
-    print(f"Results saved to {output_file}\n")
-    print(json.dumps(results, indent=4, ensure_ascii=False))
-    print("\n","-"*50,"\n")
-    print(f"Summary: \n - {found_updates}/{total_packages} packages updates found")
-    print(f" - {arrived}/{found_updates} packages are in Tunisia\n")
+    # save all the prints below to a log file
+    with open("update_log.txt", "w", encoding="utf-8") as log_file:
+        log_file.write(f"Summary: \n - {found_updates}/{total_packages} packages updates found")
+        log_file.write(f" - {in_tunisia}/{found_updates} packages are in Tunisia\n")
+        log_file.write("Packages in Tunisia by location:\n")
+        for loc, pkgs in packages_in_tunisia.items():
+            log_file.write(f" - {loc}: {len(pkgs)} packages\n")
+            for p in pkgs:
+                log_file.write(f"    • Orders: {p}\n")
 
     return results
 
