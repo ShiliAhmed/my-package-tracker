@@ -119,15 +119,24 @@ def fetch_package_updates(packages, output_file="packages_updates.json", show_on
     if show_only_updates:
         results = [res for res in results if res["updates"] != "no package update"]
 
-    # save all the prints below to a log file
+    # Print results
+    for res in results:
+        print(json.dumps(res, indent=4, ensure_ascii=False))
+        print()
+
+    # print & save all the logs below to a log file at the same time
+    log_output = []
+    log_output.append(f"Summary: \n - {found_updates}/{total_packages} packages updates found")
+    log_output.append(f" - {in_tunisia}/{found_updates} packages are in Tunisia\n")
+    log_output.append("Packages in Tunisia by location:\n")
+    for loc, pkgs in packages_in_tunisia.items():
+        log_output.append(f" - {loc}: {len(pkgs)} packages")
+        for p in pkgs:
+            log_output.append(f"    • Orders: {p}")
+
+    print("\n".join(log_output))
     with open("update_log.txt", "w", encoding="utf-8") as log_file:
-        log_file.write(f"Summary: \n - {found_updates}/{total_packages} packages updates found")
-        log_file.write(f" - {in_tunisia}/{found_updates} packages are in Tunisia\n")
-        log_file.write("Packages in Tunisia by location:\n")
-        for loc, pkgs in packages_in_tunisia.items():
-            log_file.write(f" - {loc}: {len(pkgs)} packages\n")
-            for p in pkgs:
-                log_file.write(f"    • Orders: {p}\n")
+        log_file.write("\n".join(log_output))
 
     return results
 
