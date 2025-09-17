@@ -47,6 +47,7 @@ def fetch_package_updates(packages, output_file="packages_updates.json", show_on
         if not soup:
             print("  → no package update\n")
             results.append({
+                "n°": idx,
                 "package_number": pkg_number_original,
                 "orders": pkg_items,
                 "updates": "no package update"
@@ -79,26 +80,33 @@ def fetch_package_updates(packages, output_file="packages_updates.json", show_on
 
         # Determine location priority: Ghazala > Ariana > Tunis
         location = ""
+        last_update_date = updates[-1]["Date"] if updates else None
+        if any("Livré" in u["Type d'événement"] for u in updates):
+            status = "Delivered"
+        else:
+            status= None
         if any("ghazala" in u["Lieu"].lower() for u in updates):
             location = "Ghazala"
             in_tunisia += 1
-            packages_in_tunisia[location].append(pkg_items)
+            packages_in_tunisia[location].append((pkg_items, last_update_date, status))
         elif any("ariana" in u["Lieu"].lower() for u in updates):
             location = "Ariana"
             in_tunisia += 1
-            packages_in_tunisia[location].append(pkg_items)
+            packages_in_tunisia[location].append((pkg_items, last_update_date, status))
         elif any("tunis" in u["Lieu"].lower() for u in updates):
             location = "Tunis"
             in_tunisia += 1
-            packages_in_tunisia[location].append(pkg_items)
+            packages_in_tunisia[location].append((pkg_items, last_update_date, status))
         else:
             location = "on the way"
 
         results.append({
+            "n°": idx,
             "package_number": pkg_number,
             "orders": pkg_items,
             "n° of updates": len(updates),
             "location": location,
+            "status": status,
             "days since first update": (
             (datetime.now() - datetime.strptime(updates[0]["Date"], "%d/%m/%Y %H:%M:%S")).days
             if updates else 0
@@ -132,7 +140,10 @@ def fetch_package_updates(packages, output_file="packages_updates.json", show_on
     for loc, pkgs in packages_in_tunisia.items():
         log_output.append(f" - {loc}: {len(pkgs)} packages")
         for p in pkgs:
-            log_output.append(f"    • Orders: {p}")
+            orders = f"    • Orders: {p[0]}    |  {p[1]}"
+            if p[2]:
+                orders += f"    | {p[2]}"
+            log_output.append(orders)
 
     print("\n".join(log_output))
     with open("update_log.txt", "w", encoding="utf-8") as log_file:
