@@ -81,22 +81,23 @@ def fetch_package_updates(packages, output_file="packages_updates.json", show_on
         # Determine location priority: Ghazala > Ariana > Tunis
         location = ""
         last_update_date = updates[-1]["Date"] if updates else None
+        is_today = datetime.now().strftime("%d/%m/%Y") == datetime.strptime(last_update_date, "%d/%m/%Y %H:%M:%S").strftime("%d/%m/%Y") if last_update_date else False
         if any("Livré" in u["Type d'événement"] for u in updates):
-            status = "Delivered"
+            delivered = True
         else:
-            status= None
+            delivered = False
         if any("ghazala" in u["Lieu"].lower() for u in updates):
             location = "Ghazala"
             in_tunisia += 1
-            packages_in_tunisia[location].append((pkg_items, last_update_date, status))
+            packages_in_tunisia[location].append((pkg_items, last_update_date, delivered, is_today))
         elif any("ariana" in u["Lieu"].lower() for u in updates):
             location = "Ariana"
             in_tunisia += 1
-            packages_in_tunisia[location].append((pkg_items, last_update_date, status))
+            packages_in_tunisia[location].append((pkg_items, last_update_date, delivered, is_today))
         elif any("tunis" in u["Lieu"].lower() for u in updates):
             location = "Tunis"
             in_tunisia += 1
-            packages_in_tunisia[location].append((pkg_items, last_update_date, status))
+            packages_in_tunisia[location].append((pkg_items, last_update_date, delivered, is_today))
         else:
             location = "on the way"
 
@@ -106,7 +107,7 @@ def fetch_package_updates(packages, output_file="packages_updates.json", show_on
             "orders": pkg_items,
             "n° of updates": len(updates),
             "location": location,
-            "status": status,
+            "delivered": delivered,
             "days since first update": (
             (datetime.now() - datetime.strptime(updates[0]["Date"], "%d/%m/%Y %H:%M:%S")).days
             if updates else 0
@@ -134,16 +135,28 @@ def fetch_package_updates(packages, output_file="packages_updates.json", show_on
 
     # print & save all the logs below to a log file at the same time
     log_output = []
+    separator = "-" * 80
+    order_cut = 30
     log_output.append(f"Summary: \n - {found_updates}/{total_packages} packages updates found")
     log_output.append(f" - {in_tunisia}/{found_updates} packages are in Tunisia\n")
-    log_output.append("Packages in Tunisia by location:\n")
+    log_output.append("Packages in Tunisia by location:")
     for loc, pkgs in packages_in_tunisia.items():
-        log_output.append(f" - {loc}: {len(pkgs)} packages")
+        log_output.append(f"\n - {loc}: {len(pkgs)} packages")
+        if pkgs:
+            log_output.append(separator)
         for p in pkgs:
-            orders = f"    • Orders: {p[0]}    |  {p[1]}"
+            # p[0] contains orders list, i want to print it as a string but for every order only first 50 chars
+            orders = f"\t{p[0][0][:order_cut]+"..."}"
+            orders += f"\t|\t{p[1]}"
             if p[2]:
-                orders += f"    | {p[2]}"
+                orders += f"\t|\t✅ Delivered ✅"
+            if p[3]:
+                orders += f"\t|\t✨ Today ✨"
+            if len(p[0]) > 1:
+                for o in p[0][1:]:
+                    orders += f"\n\t{o[:order_cut]+"..."}"
             log_output.append(orders)
+            log_output.append(separator)
 
     print("\n".join(log_output))
     with open("update_log.txt", "w", encoding="utf-8") as log_file:
