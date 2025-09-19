@@ -10,7 +10,9 @@ def fetch_package_updates(packages, output_file="packages_updates.json", show_on
     total_packages = len(packages)
     found_updates = 0
     in_tunisia = 0
+    on_the_way = 0
     packages_in_tunisia = {"Ghazala": [], "Ariana": [], "Tunis": []}
+    packages_on_the_way = []
 
     print(f"{total_packages} packages to check found\n")
 
@@ -100,6 +102,8 @@ def fetch_package_updates(packages, output_file="packages_updates.json", show_on
             packages_in_tunisia[location].append((pkg_items, last_update_date, delivered, is_today))
         else:
             location = "on the way"
+            on_the_way += 1
+            packages_on_the_way.append((pkg_items, last_update_date, is_today))
 
         results.append({
             "n°": idx,
@@ -126,10 +130,11 @@ def fetch_package_updates(packages, output_file="packages_updates.json", show_on
         json.dump(results, f, indent=4, ensure_ascii=False)
 
     if show_only_updates:
-        results = [res for res in results if res["updates"] != "no package update"]
+        with_update = [res for res in results if res["updates"] != "no package update"]
+        no_update = [res for res in results if res["updates"] == "no package update"]
 
     # Print results
-    for res in results:
+    for res in with_update:
         print(json.dumps(res, indent=4, ensure_ascii=False))
         print()
 
@@ -157,12 +162,33 @@ def fetch_package_updates(packages, output_file="packages_updates.json", show_on
                     orders += f"\n\t{o[:order_cut]+"..."}"
             log_output.append(orders)
             log_output.append(separator)
+            
+    log_output.append(f"\n - On the way: {on_the_way} packages")
+    if packages_on_the_way:
+        log_output.append(separator)
+    for p in packages_on_the_way:
+        orders = f"\t{p[0][0][:order_cut]+"..."}"
+        orders += f"\t|\t{p[1]}"
+        if p[2]:
+            orders += f"\t|\t✨ Today ✨"
+        if len(p[0]) > 1:
+            for o in p[0][1:]:
+                orders += f"\n\t{o[:order_cut]+"..."}"
+        log_output.append(orders)
+        log_output.append(separator) 
+        
+    log_output.append(f"\nNo updates for {len(no_update)}/{total_packages} packages")
+    if no_update:
+        log_output.append(separator)
+    for res in no_update:
+        log_output.append(f"\t{res['orders'][0][:order_cut]+"..."}\t|\t{res['package_number']}")
 
     print("\n".join(log_output))
     with open("update_log.txt", "w", encoding="utf-8") as log_file:
         log_file.write("\n".join(log_output))
 
-    return results
+    return with_update, no_update
+
 
 with open("package_list.json", "r", encoding="utf-8") as f:
     packages_list = json.load(f)
