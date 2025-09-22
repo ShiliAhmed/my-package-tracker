@@ -91,19 +91,43 @@ def fetch_package_updates(packages, output_file="packages_updates.json", show_on
         if any("ghazala" in u["Lieu"].lower() for u in updates):
             location = "Ghazala"
             in_tunisia += 1
-            packages_in_tunisia[location].append((pkg_items, last_update_date, delivered, is_today))
+            # change the the tuple to a dict for better readability
+            packages_in_tunisia[location].append({
+                "package_number": pkg_number,
+                "orders": pkg_items,
+                "last_update_date": last_update_date,
+                "delivered": delivered,
+                "is_today": is_today
+            })
         elif any("ariana" in u["Lieu"].lower() for u in updates):
             location = "Ariana"
             in_tunisia += 1
-            packages_in_tunisia[location].append((pkg_items, last_update_date, delivered, is_today))
+            packages_in_tunisia[location].append({
+                "package_number": pkg_number,
+                "orders": pkg_items,
+                "last_update_date": last_update_date,
+                "delivered": delivered,
+                "is_today": is_today
+            })
         elif any("tunis" in u["Lieu"].lower() for u in updates):
             location = "Tunis"
             in_tunisia += 1
-            packages_in_tunisia[location].append((pkg_items, last_update_date, delivered, is_today))
+            packages_in_tunisia[location].append({
+                "package_number": pkg_number,
+                "orders": pkg_items,
+                "last_update_date": last_update_date,
+                "delivered": delivered,
+                "is_today": is_today
+            })
         else:
             location = "on the way"
             on_the_way += 1
-            packages_on_the_way.append((pkg_items, last_update_date, is_today))
+            packages_on_the_way.append({
+                "package_number": pkg_number,
+                "orders": pkg_items,
+                "last_update_date": last_update_date,
+                "is_today": is_today
+            })
 
         results.append({
             "n°": idx,
@@ -149,17 +173,19 @@ def fetch_package_updates(packages, output_file="packages_updates.json", show_on
         log_output.append(f"\n - {loc}: {len(pkgs)} packages")
         if pkgs:
             log_output.append(separator)
+            # first_order = None
         for p in pkgs:
-            # p[0] contains orders list, i want to print it as a string but for every order only first 50 chars
-            orders = f"\t{p[0][0][:order_cut]+"..."}"
-            orders += f"\t|\t{p[1]}"
-            if p[2]:
+            orders = f"\t{p['package_number']}"
+            first_order = p['orders'][0][:order_cut]+"..."
+            orders += f"\t|\t{first_order.ljust(order_cut+3)}"
+            orders += f"\t|\t{p['last_update_date']}"
+            if p['delivered']:
                 orders += f"\t|\t✅ Delivered ✅"
-            if p[3]:
+            if p['is_today']:
                 orders += f"\t|\t✨ Today ✨"
-            if len(p[0]) > 1:
-                for o in p[0][1:]:
-                    orders += f"\n\t{o[:order_cut]+"..."}"
+            if len(p['orders']) > 1:
+                for o in p['orders'][1:]:
+                    orders += f"\n\t\t\t\t\t\t{o[:order_cut]+"..."}"
             log_output.append(orders)
             log_output.append(separator)
             
@@ -167,17 +193,19 @@ def fetch_package_updates(packages, output_file="packages_updates.json", show_on
     if packages_on_the_way:
         log_output.append(separator)
     for p in packages_on_the_way:
-        orders = f"\t{p[0][0][:order_cut]+"..."}"
-        orders += f"\t|\t{p[1]}"
-        if p[2]:
+        orders = f"\t{p['package_number']}"
+        first_order = p['orders'][0][:order_cut]+"..."
+        orders += f"\t|\t{first_order.ljust(order_cut+3)}"
+        orders += f"\t|\t{p['last_update_date']}"
+        if p['is_today']:
             orders += f"\t|\t✨ Today ✨"
-        if len(p[0]) > 1:
-            for o in p[0][1:]:
-                orders += f"\n\t{o[:order_cut]+"..."}"
+        if len(p['orders']) > 1:
+            for o in p['orders'][1:]:
+                orders += f"\n\t\t\t\t\t\t{o[:order_cut]+"..."}"
         log_output.append(orders)
         log_output.append(separator) 
         
-    log_output.append(f"\nNo updates for {len(no_update)}/{total_packages} packages")
+    log_output.append(f"\n - No updates: {len(no_update)} packages")
     if no_update:
         log_output.append(separator)
     for res in no_update:
