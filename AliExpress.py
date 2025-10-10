@@ -209,7 +209,8 @@ def fetch_package_updates(packages, output_file="packages_updates.json", show_on
     if no_update:
         log_output.append(separator)
     for res in no_update:
-        log_output.append(f"\t{res['orders'][0][:order_cut]+"..."}\t|\t{res['package_number']}")
+        log_output.append(f"\t{(res['orders'][0][:order_cut]+"...").ljust(order_cut+3)}\t|\t{res['package_number']}")
+        log_output.append(separator)
 
     print("\n".join(log_output))
     with open("update_log.txt", "w", encoding="utf-8") as log_file:
