@@ -11,7 +11,9 @@ def fetch_package_updates(packages, output_file="packages_updates.json", show_on
     found_updates = 0
     in_tunisia = 0
     on_the_way = 0
+    show_delivered = False
     packages_in_tunisia = {"Ghazala": [], "Ariana": [], "Tunis": []}
+    packages_in_tunisia_not_delivered = {"Ghazala": [], "Ariana": [], "Tunis": []}
     packages_on_the_way = []
 
     print(f"{total_packages} packages to check found\n")
@@ -88,37 +90,31 @@ def fetch_package_updates(packages, output_file="packages_updates.json", show_on
             delivered = True
         else:
             delivered = False
+        data = {
+            "package_number": pkg_number,
+            "orders": pkg_items,
+            "last_update_date": last_update_date,
+            "delivered": delivered,
+            "is_today": is_today
+        }
         if any("ghazala" in u["Lieu"].lower() for u in updates):
             location = "Ghazala"
             in_tunisia += 1
-            # change the the tuple to a dict for better readability
-            packages_in_tunisia[location].append({
-                "package_number": pkg_number,
-                "orders": pkg_items,
-                "last_update_date": last_update_date,
-                "delivered": delivered,
-                "is_today": is_today
-            })
+            packages_in_tunisia[location].append(data)
+            if not delivered:
+                packages_in_tunisia_not_delivered[location].append(data)
         elif any("ariana" in u["Lieu"].lower() for u in updates):
             location = "Ariana"
             in_tunisia += 1
-            packages_in_tunisia[location].append({
-                "package_number": pkg_number,
-                "orders": pkg_items,
-                "last_update_date": last_update_date,
-                "delivered": delivered,
-                "is_today": is_today
-            })
+            packages_in_tunisia[location].append(data)
+            if not delivered:
+                packages_in_tunisia_not_delivered[location].append(data)
         elif any("tunis" in u["Lieu"].lower() for u in updates):
             location = "Tunis"
             in_tunisia += 1
-            packages_in_tunisia[location].append({
-                "package_number": pkg_number,
-                "orders": pkg_items,
-                "last_update_date": last_update_date,
-                "delivered": delivered,
-                "is_today": is_today
-            })
+            packages_in_tunisia[location].append(data)
+            if not delivered:
+                packages_in_tunisia_not_delivered[location].append(data)
         else:
             location = "on the way"
             on_the_way += 1
@@ -164,12 +160,14 @@ def fetch_package_updates(packages, output_file="packages_updates.json", show_on
 
     # print & save all the logs below to a log file at the same time
     log_output = []
-    separator = "-" * 80
+    separator = "-" * 100
     order_cut = 30
     log_output.append(f"Summary: \n - {found_updates}/{total_packages} packages updates found")
     log_output.append(f" - {in_tunisia}/{found_updates} packages are in Tunisia\n")
-    log_output.append("Packages in Tunisia by location:")
-    for loc, pkgs in packages_in_tunisia.items():
+    log_output.append(f"Packages in Tunisia by location {('(including delivered)' if show_delivered else '(not delivered only)')}:")
+    
+    packages_to_show = packages_in_tunisia if show_delivered else packages_in_tunisia_not_delivered
+    for loc, pkgs in packages_to_show.items():
         log_output.append(f"\n - {loc}: {len(pkgs)} packages")
         if pkgs:
             log_output.append(separator)
