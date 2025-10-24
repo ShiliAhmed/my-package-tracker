@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 import json
 from rich import print
 
+
 def fetch_package_updates(packages, output_file="packages_updates.json", show_only_updates=True):
     base_url = "http://www.rapidposte.poste.tn/fr/Item_Events.asp?ItemId="
     results = []
@@ -214,11 +215,19 @@ def fetch_package_updates(packages, output_file="packages_updates.json", show_on
     with open("update_log.txt", "w", encoding="utf-8") as log_file:
         log_file.write("\n".join(log_output))
 
-    return with_update, no_update
+    return with_update, no_update, log_output
 
 
-with open("package_list.json", "r", encoding="utf-8") as f:
-    packages_list = json.load(f)
+def load_packages_from_file(path="package_list.json"):
+    """Load package list from a JSON file and return it.
+
+    This helper makes the module import-safe so other scripts (like a bot)
+    can import fetch_package_updates without running the script on import.
+    """
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
 
 if __name__ == "__main__":
+    packages_list = load_packages_from_file()
     fetch_package_updates(packages_list, show_only_updates=True)
