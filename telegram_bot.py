@@ -41,8 +41,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def checkall(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🔍 Checking all packages, this may take a while...")
-    packages = load_packages_from_file()
-    with_update, no_update, mobile_output = create_mobile_output(packages, show_only_updates=True)
+    try:
+        packages = load_packages_from_file()
+        logger.info(f"Loaded {len(packages)} packages")
+        with_update, no_update, mobile_output = create_mobile_output(packages, show_only_updates=True)
+    except Exception as e:
+        logger.error(f"Error in checkall: {e}", exc_info=True)
+        await update.message.reply_text(f"❌ Error: {str(e)}")
+        return
     
     # Format package numbers for easy copying (wrap in backticks for monospace)
     formatted_output = []

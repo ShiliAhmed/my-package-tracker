@@ -2,7 +2,10 @@ from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
 import json
+import logging
 from rich import print
+
+logger = logging.getLogger(__name__)
 
 
 def fetch_package_updates(packages, output_file="packages_updates.json", show_only_updates=True):
@@ -35,7 +38,12 @@ def fetch_package_updates(packages, output_file="packages_updates.json", show_on
         for attempt in pkg_numbers_to_try:
             url = base_url + attempt
             try:
-                response = requests.get(url, timeout=10)
+                logger.info(f"Fetching URL: {url}")
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                }
+                response = requests.get(url, headers=headers, timeout=30)
+                logger.info(f"Response status: {response.status_code}, length: {len(response.text)}")
                 response.raise_for_status()
                 
                 temp_soup = BeautifulSoup(response.text, "html.parser")
@@ -47,6 +55,7 @@ def fetch_package_updates(packages, output_file="packages_updates.json", show_on
                 else:
                     print(f"  → No updates for {attempt}")
             except requests.RequestException as e:
+                logger.error(f"Error fetching {attempt}: {e}")
                 print(f"  ⚠ Error fetching {attempt}: {e}")
         
         if not soup:
@@ -245,7 +254,12 @@ def create_mobile_output(packages, show_only_updates=True):
         for attempt in pkg_numbers_to_try:
             url = base_url + attempt
             try:
-                response = requests.get(url, timeout=10)
+                logger.info(f"Fetching URL: {url}")
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                }
+                response = requests.get(url, headers=headers, timeout=30)
+                logger.info(f"Response status: {response.status_code}, length: {len(response.text)}")
                 response.raise_for_status()
                 
                 temp_soup = BeautifulSoup(response.text, "html.parser")
