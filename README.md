@@ -35,14 +35,14 @@ python telegram_bot.py
 ## Deploy to Cloud (Free Options)
 
 Want to run your bot 24/7 in the cloud? Check out **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** for:
-- **Railway.app** (Recommended - Easiest setup) ⚡ **Native uv support**
+- **Railway.app** (Recommended - Easiest setup)
 - **Render.com** (Great for 24/7 bots)
 - **Fly.io** (Most powerful free tier)
 - And more!
 
 All platforms offer free tiers perfect for personal use!
 
-**💡 Bonus:** This project uses [uv](https://docs.astral.sh/uv/) for ultra-fast builds! See **[UV_WITH_RAILWAY.md](UV_WITH_RAILWAY.md)**.
+**💡 Bonus:** This project uses [uv](https://docs.astral.sh/uv/) for ultra-fast local development! Railway uses pip for deployment.
 
 ## Notes
 
