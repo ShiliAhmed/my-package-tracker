@@ -10,3 +10,20 @@ wheels/
 .venv
 packages_updates.json
 update_log.txt
+
+# Sensitive files
+telegram_token.txt
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+*.md
+!README.md
