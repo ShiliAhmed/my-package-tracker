@@ -256,9 +256,9 @@ def create_mobile_output(packages, show_only_updates=True):
             try:
                 logger.info(f"Fetching URL: {url}")
                 headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
                 }
-                response = requests.get(url, headers=headers, timeout=30)
+                response = requests.get(url, headers=headers, timeout=5)
                 logger.info(f"Response status: {response.status_code}, length: {len(response.text)}")
                 response.raise_for_status()
                 

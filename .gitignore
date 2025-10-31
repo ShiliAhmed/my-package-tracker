@@ -21,6 +21,7 @@ telegram_token.txt
 .idea/
 *.swp
 *.swo
+.env
 
 # OS
 .DS_Store
