@@ -204,8 +204,10 @@ def main():
     app.add_handler(CommandHandler("check", check))
     app.add_handler(CallbackQueryHandler(button_handler))
 
+    # For cloud deployment, use polling with drop_pending_updates
+    logger.info("Bot starting...")
     print("Bot started. Press Ctrl-C to stop.")
-    app.run_polling()
+    app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
 
 
 if __name__ == '__main__':
