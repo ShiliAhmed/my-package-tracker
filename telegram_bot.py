@@ -2,11 +2,12 @@ import os
 import logging
 from pathlib import Path
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler, MessageHandler, filters
 from dotenv import load_dotenv
 load_dotenv()
 
-from AliExpress import fetch_package_updates, create_mobile_output, load_packages_from_file
+from AliExpress import fetch_package_updates, create_mobile_output, load_packages_from_file, fetch_single_package
+from single_package_formatter import format_single_package_detail
 
 # Basic logging
 logging.basicConfig(
@@ -39,6 +40,34 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='Markdown'
     )
 
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle text messages - greetings or any other text"""
+    text = update.message.text.lower() if update.message.text else ""
+    
+    # Greetings list
+    greetings = ['hi', 'hello', 'hey', 'hey there', 'hi there', 'greetings', 'salut', 'bonjour', 'مرحبا']
+    
+    # Check if it's a greeting
+    is_greeting = any(greeting in text for greeting in greetings)
+    
+    # Send start message for greetings or any other text
+    keyboard = [
+        [InlineKeyboardButton("🔄 Check All Packages", callback_data='checkall')],
+        [InlineKeyboardButton("ℹ️ Help", callback_data='help')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    if is_greeting:
+        message = "👋 **Hi there!**\n\n📦 **Welcome to Package Tracker Bot!**\n\nUse the buttons below for quick actions or commands:\n• `/checkall` - Check all packages\n• `/check <TRACKING>` - Check specific package"
+    else:
+        message = "📦 **Welcome to Package Tracker Bot!**\n\nUse the buttons below for quick actions or commands:\n• `/checkall` - Check all packages\n• `/check <TRACKING>` - Check specific package"
+    
+    await update.message.reply_text(
+        message,
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
+
 async def checkall(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🔍 Checking all packages, this may take a while...")
     try:
@@ -50,26 +79,44 @@ async def checkall(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Error: {str(e)}")
         return
     
-    # Format package numbers for easy copying (wrap in backticks for monospace)
+    # Extract tracking numbers ONLY from packages with updates AND not delivered (exclude no-update and delivered packages)
+    tracking_numbers = []
+    for pkg in with_update:
+        # Skip delivered packages
+        if pkg.get("delivered", False):
+            continue
+        tracking_num = pkg.get("package_number")
+        if tracking_num:
+            tracking_numbers.append(tracking_num)
+    
+    # Format output text with backticks for tracking numbers
     formatted_output = []
     for line in mobile_output:
-        # Replace package tracking numbers with code-formatted versions
-        if '┌─' in line and any(char.isdigit() or char.isupper() for char in line):
-            # Extract tracking number and wrap in backticks
-            tracking_num = line.split('┌─')[1].strip().split()[0] if '┌─' in line else None
-            if tracking_num:
-                line = line.replace(tracking_num, f'`{tracking_num}`')
+        # Extract tracking numbers and wrap in backticks
+        if '┌─' in line:
+            parts = line.split('┌─')
+            if len(parts) > 1:
+                tracking_num = parts[1].strip().split()[0]
+                if tracking_num and any(c.isalnum() for c in tracking_num):
+                    # Only format if it's in our tracking_numbers list (has updates)
+                    if tracking_num in tracking_numbers:
+                        line = line.replace(tracking_num, f'`{tracking_num}`')
         formatted_output.append(line)
     
     # Send the mobile-friendly formatted output
     final = "\n".join(formatted_output)
     
-    # Send messages with refresh button on last chunk
+    # Create buttons ONLY for packages with updates (max 100 buttons per message)
+    tracking_buttons = []
+    for tn in tracking_numbers[:99]:  # Telegram limit is 100 buttons
+        tracking_buttons.append([InlineKeyboardButton(f"📦 {tn}", callback_data=f"confirm_check_{tn}")])
+    
+    # Send messages with buttons on last chunk
     chunks = [final[i:i+3500] for i in range(0, len(final), 3500)]
     for idx, chunk in enumerate(chunks):
         if idx == len(chunks) - 1:
-            # Add refresh button to last message
-            keyboard = [[InlineKeyboardButton("🔄 Refresh", callback_data='checkall')]]
+            # Add tracking buttons and refresh button
+            keyboard = tracking_buttons + [[InlineKeyboardButton("🔄 Refresh", callback_data='checkall')]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text(chunk, reply_markup=reply_markup, parse_mode='Markdown')
         else:
@@ -81,30 +128,43 @@ async def check(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     tracking = context.args[0]
     await update.message.reply_text(f"🔍 Checking `{tracking}`...", parse_mode='Markdown')
-    packages = [{"package_number": tracking, "package orders": []}]
-    with_update, no_update, mobile_output = create_mobile_output(packages, show_only_updates=False)
     
-    # Format package numbers for easy copying
-    formatted_output = []
-    for line in mobile_output:
-        if '┌─' in line:
-            tracking_num = line.split('┌─')[1].strip().split()[0] if '┌─' in line else None
-            if tracking_num:
-                line = line.replace(tracking_num, f'`{tracking_num}`')
-        formatted_output.append(line)
-    
-    # Send the mobile-friendly formatted output
-    final = "\n".join(formatted_output)
-    
-    chunks = [final[i:i+3500] for i in range(0, len(final), 3500)]
-    for idx, chunk in enumerate(chunks):
-        if idx == len(chunks) - 1:
-            # Add refresh button to last message
-            keyboard = [[InlineKeyboardButton("🔄 Check Again", callback_data=f'check_{tracking}')]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text(chunk, reply_markup=reply_markup, parse_mode='Markdown')
-        else:
-            await update.message.reply_text(chunk, parse_mode='Markdown')
+    try:
+        # Try to find package in list to get orders
+        packages = load_packages_from_file()
+        package_orders = []
+        for pkg in packages:
+            if pkg.get("package_number") == tracking or tracking in pkg.get("package_number", ""):
+                package_orders = pkg.get("package orders", [])
+                break
+        
+        # Fetch single package with full details
+        package_result = fetch_single_package(tracking, package_orders)
+        
+        if not package_result:
+            await update.message.reply_text(f"❌ No updates found for `{tracking}`", parse_mode='Markdown')
+            return
+        
+        # Format detailed output
+        detailed_output = format_single_package_detail(package_result)
+        final = "\n".join(detailed_output)
+        
+        # Send in chunks if needed
+        chunks = [final[i:i+3500] for i in range(0, len(final), 3500)]
+        for idx, chunk in enumerate(chunks):
+            if idx == len(chunks) - 1:
+                keyboard = [
+                    [InlineKeyboardButton("🔄 Check Again", callback_data=f'check_{tracking}')],
+                    [InlineKeyboardButton("📦 Check All", callback_data='checkall')]
+                    [InlineKeyboardButton("ℹ️ Help", callback_data='help')]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await update.message.reply_text(chunk, reply_markup=reply_markup, parse_mode='Markdown')
+            else:
+                await update.message.reply_text(chunk, parse_mode='Markdown')
+    except Exception as e:
+        logger.error(f"Error in check: {e}", exc_info=True)
+        await update.message.reply_text(f"❌ Error: {str(e)}")
 
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -118,20 +178,39 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         packages = load_packages_from_file()
         with_update, no_update, mobile_output = create_mobile_output(packages, show_only_updates=True)
         
-        # Format package numbers for easy copying
+        # Extract tracking numbers ONLY from packages with updates AND not delivered (exclude no-update and delivered packages)
+        tracking_numbers = []
+        for pkg in with_update:
+            # Skip delivered packages
+            if pkg.get("delivered", False):
+                continue
+            tracking_num = pkg.get("package_number")
+            if tracking_num:
+                tracking_numbers.append(tracking_num)
+        
+        # Format output text with backticks for tracking numbers
         formatted_output = []
         for line in mobile_output:
             if '┌─' in line:
-                tracking_num = line.split('┌─')[1].strip().split()[0] if '┌─' in line else None
-                if tracking_num:
-                    line = line.replace(tracking_num, f'`{tracking_num}`')
+                parts = line.split('┌─')
+                if len(parts) > 1:
+                    tracking_num = parts[1].strip().split()[0]
+                    if tracking_num and any(c.isalnum() for c in tracking_num):
+                        # Only format if it's in our tracking_numbers list (has updates)
+                        if tracking_num in tracking_numbers:
+                            line = line.replace(tracking_num, f'`{tracking_num}`')
             formatted_output.append(line)
         
         final = "\n".join(formatted_output)
+        # Create buttons ONLY for packages with updates
+        tracking_buttons = []
+        for tn in tracking_numbers[:99]:
+            tracking_buttons.append([InlineKeyboardButton(f"📦 {tn}", callback_data=f"confirm_check_{tn}")])
+        
         chunks = [final[i:i+3500] for i in range(0, len(final), 3500)]
         for idx, chunk in enumerate(chunks):
             if idx == len(chunks) - 1:
-                keyboard = [[InlineKeyboardButton("🔄 Refresh", callback_data='checkall')]]
+                keyboard = tracking_buttons + [[InlineKeyboardButton("🔄 Refresh", callback_data='checkall')]]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 await query.message.reply_text(chunk, reply_markup=reply_markup, parse_mode='Markdown')
             else:
@@ -169,31 +248,70 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='Markdown'
         )
     
+    elif query.data.startswith('confirm_check_'):
+        # Show confirmation with Yes/No buttons as a NEW message
+        tracking = query.data.replace('confirm_check_', '')
+        await query.answer()  # Acknowledge the button click
+        keyboard = [
+            [
+                InlineKeyboardButton("✅ Yes", callback_data=f'check_{tracking}'),
+                InlineKeyboardButton("❌ No", callback_data='cancel')
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        # Send as new message, don't edit the original
+        await query.message.reply_text(
+            f"Do you want to check package `{tracking}`?",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+    
+    elif query.data == 'cancel':
+        await query.answer("Cancelled")
+        # Don't edit, just acknowledge
+    
     elif query.data.startswith('check_'):
         # Handle individual package check from callback
         tracking = query.data.replace('check_', '')
+        await query.answer()
         await query.message.reply_text(f"🔍 Checking `{tracking}`...", parse_mode='Markdown')
-        packages = [{"package_number": tracking, "package orders": []}]
-        with_update, no_update, mobile_output = create_mobile_output(packages, show_only_updates=False)
         
-        # Format package numbers for easy copying
-        formatted_output = []
-        for line in mobile_output:
-            if '┌─' in line:
-                tracking_num = line.split('┌─')[1].strip().split()[0] if '┌─' in line else None
-                if tracking_num:
-                    line = line.replace(tracking_num, f'`{tracking_num}`')
-            formatted_output.append(line)
-        
-        final = "\n".join(formatted_output)
-        chunks = [final[i:i+3500] for i in range(0, len(final), 3500)]
-        for idx, chunk in enumerate(chunks):
-            if idx == len(chunks) - 1:
-                keyboard = [[InlineKeyboardButton("🔄 Check Again", callback_data=f'check_{tracking}')]]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                await query.message.reply_text(chunk, reply_markup=reply_markup, parse_mode='Markdown')
-            else:
-                await query.message.reply_text(chunk, parse_mode='Markdown')
+        try:
+            # Try to find package in list to get orders
+            packages = load_packages_from_file()
+            package_orders = []
+            for pkg in packages:
+                if pkg.get("package_number") == tracking or tracking in pkg.get("package_number", ""):
+                    package_orders = pkg.get("package orders", [])
+                    break
+            
+            # Fetch single package with full details
+            package_result = fetch_single_package(tracking, package_orders)
+            
+            if not package_result:
+                await query.message.reply_text(f"❌ No updates found for `{tracking}`", parse_mode='Markdown')
+                return
+            
+            # Format detailed output
+            detailed_output = format_single_package_detail(package_result)
+            final = "\n".join(detailed_output)
+            
+            # Send in chunks if needed (always as new message)
+            chunks = [final[i:i+3500] for i in range(0, len(final), 3500)]
+            for idx, chunk in enumerate(chunks):
+                if idx == len(chunks) - 1:
+                    keyboard = [
+                        [InlineKeyboardButton("🔄 Check Again", callback_data=f'check_{tracking}')],
+                        [InlineKeyboardButton("📦 Check All", callback_data='checkall')],
+                        [InlineKeyboardButton("ℹ️ Help", callback_data='help')]
+                    ]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    await query.message.reply_text(chunk, reply_markup=reply_markup, parse_mode='Markdown')
+                else:
+                    await query.message.reply_text(chunk, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Error in check callback: {e}", exc_info=True)
+            await query.message.reply_text(f"❌ Error: {str(e)}")
 
 
 def main():
@@ -203,6 +321,8 @@ def main():
     app.add_handler(CommandHandler("checkall", checkall))
     app.add_handler(CommandHandler("check", check))
     app.add_handler(CallbackQueryHandler(button_handler))
+    # Handle text messages (greetings and any other text) - must be after command handlers
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # For cloud deployment, use polling with drop_pending_updates
     logger.info("Bot starting...")

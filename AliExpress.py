@@ -365,120 +365,113 @@ def create_mobile_output(packages, show_only_updates=True):
     if show_only_updates:
         with_update = [res for res in results if res["updates"] != "no package update"]
         no_update = [res for res in results if res["updates"] == "no package update"]
+    else:
+        with_update = results
+        no_update = []
 
-    # Create mobile-friendly output
-    mobile_output = []
-    
-    # Header
-    mobile_output.append("📦 PACKAGE TRACKER")
-    mobile_output.append("━━━━━━━━━━━━━━━")
-    mobile_output.append("")
-    
-    # Summary
-    mobile_output.append("📊 SUMMARY")
-    mobile_output.append(f"• {found_updates}/{total_packages} packages found")
-    mobile_output.append(f"• {in_tunisia} in Tunisia, {on_the_way} on the way")
-    mobile_output.append("")
-    
-    # Packages in Tunisia
-    packages_to_show = packages_in_tunisia if show_delivered else packages_in_tunisia_not_delivered
-    total_in_tunisia = sum(len(pkgs) for pkgs in packages_to_show.values())
-    
-    if total_in_tunisia > 0:
-        mobile_output.append("📍 TUNISIA")
-        mobile_output.append("━━━━━━━━━━━━━━━")
-        mobile_output.append("")
-        
-        for loc, pkgs in packages_to_show.items():
-            if pkgs:
-                mobile_output.append(f"🏢 {loc} ({len(pkgs)})")
-                for i, p in enumerate(pkgs):
-                    # Package number
-                    mobile_output.append(f"┌─ {p['package_number']}")
-                    
-                    # First order description (truncated for mobile)
-                    first_order = p['orders'][0]
-                    if len(first_order) > 30:
-                        first_order = first_order[:27] + "..."
-                    mobile_output.append(f" │  📝 {first_order}")
-                    
-                    # Additional orders if any
-                    if len(p['orders']) > 1:
-                        for o in p['orders'][1:]:
-                            if len(o) > 30:
-                                o = o[:27] + "..."
-                            mobile_output.append(f" │  📝 {o}")
-
-                    # Last update date
-                    mobile_output.append(f" │  🕐 {p['last_update_date']}")
-                    
-                    # Status indicators
-                    status_indicators = []
-                    if p['delivered']:
-                        status_indicators.append("✅ Delivered")
-                    if p['is_today']:
-                        status_indicators.append("✨ Today")
-                    
-                    if status_indicators:
-                        mobile_output.append(f" │  {' '.join(status_indicators)}")
-                    
-                    
-                    # Close the package block
-                    mobile_output.append("└─" if i == len(pkgs) - 1 else "├─")
-                mobile_output.append("")
-    
-    # Packages on the way
-    if packages_on_the_way:
-        mobile_output.append(f"🚚 ON THE WAY ({len(packages_on_the_way)})")
-        mobile_output.append("━━━━━━━━━━━━━━━")
-        mobile_output.append("")
-        
-        for i, p in enumerate(packages_on_the_way):
-            # Package number
-            mobile_output.append(f"┌─ {p['package_number']}")
-            
-            # First order description (truncated for mobile)
-            first_order = p['orders'][0]
-            if len(first_order) > 30:
-                first_order = first_order[:27] + "..."
-            mobile_output.append(f" │  📝 {first_order}")
-            
-            # Additional orders if any
-            if len(p['orders']) > 1:
-                for o in p['orders'][1:]:
-                    if len(o) > 30:
-                        o = o[:27] + "..."
-                    mobile_output.append(f" │  📝 {o}")
-                    
-            # Last update date
-            mobile_output.append(f" │  🕐 {p['last_update_date']}")
-            
-            # Status indicators
-            if p['is_today']:
-                mobile_output.append(" │  ✨ Today")
-            
-            
-            # Close the package block
-            mobile_output.append("└─" if i == len(packages_on_the_way) - 1 else "├─")
-        mobile_output.append("")
-    
-    # No updates
-    if no_update:
-        mobile_output.append("❌ NO UPDATES")
-        mobile_output.append("━━━━━━━━━━━━━━━")
-        mobile_output.append("")
-        
-        for i, res in enumerate(no_update):
-            first_order = res['orders'][0]
-            if len(first_order) > 30:
-                first_order = first_order[:27] + "..."
-            mobile_output.append(f"┌─ {res['package_number']}")
-            mobile_output.append(f" │  📝 {first_order}")
-            mobile_output.append(" │  ❌ No updates found")
-            mobile_output.append("└─" if i == len(no_update) - 1 else "├─")
-        mobile_output.append("")
+    # Use the new mobile formatter
+    from mobile_formatter import format_mobile_output
+    # Pass all results with updates to count delivered packages correctly
+    all_results_with_updates = [res for res in results if res["updates"] != "no package update"]
+    mobile_output = format_mobile_output(
+        results=all_results_with_updates,
+        packages_in_tunisia_not_delivered=packages_in_tunisia_not_delivered,
+        packages_on_the_way=packages_on_the_way,
+        total_packages=total_packages,
+        found_updates=found_updates,
+        no_update=no_update
+    )
 
     return with_update, no_update, mobile_output
+
+
+def fetch_single_package(tracking_number, package_orders=None):
+    """Fetch detailed information for a single package including full tracking table"""
+    if package_orders is None:
+        package_orders = []
+    
+    base_url = "http://www.rapidposte.poste.tn/fr/Item_Events.asp?ItemId="
+    
+    pkg_numbers_to_try = [tracking_number]
+    if "/" in tracking_number:
+        pkg_numbers_to_try = tracking_number.split('/')
+    
+    soup = None
+    pkg_number = None
+    
+    for attempt in pkg_numbers_to_try:
+        url = base_url + attempt
+        try:
+            logger.info(f"Fetching URL: {url}")
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
+            }
+            response = requests.get(url, headers=headers, timeout=5)
+            logger.info(f"Response status: {response.status_code}, length: {len(response.text)}")
+            response.raise_for_status()
+            
+            temp_soup = BeautifulSoup(response.text, "html.parser")
+            if temp_soup.find("table", {"id": "200"}):
+                soup = temp_soup
+                pkg_number = attempt
+                break
+        except requests.RequestException as e:
+            logger.error(f"Error fetching {attempt}: {e}")
+            continue
+    
+    if not soup:
+        return None
+    
+    table = soup.find("table", {"id": "200"})
+    updates = []
+    rows = table.find_all("tr")[2:]  # skip header rows
+    
+    for row in rows:
+        cols = row.find_all("td")
+        if len(cols) < 4:
+            continue
+        date = cols[0].get_text(strip=True)
+        pays = cols[1].get_text(strip=True)
+        lieu = cols[2].get_text(strip=True)
+        event = cols[3].get_text(strip=True)
+        
+        updates.append({
+            "Date": date,
+            "Pays": pays,
+            "Lieu": lieu,
+            "Type d'événement": event
+        })
+    
+    # Determine location and status
+    location = ""
+    last_update_date = updates[-1]["Date"] if updates else None
+    is_today = False
+    if last_update_date:
+        try:
+            is_today = datetime.now().strftime("%d/%m/%Y") == datetime.strptime(last_update_date, "%d/%m/%Y %H:%M:%S").strftime("%d/%m/%Y")
+        except:
+            pass
+    
+    delivered = any("Livré" in u["Type d'événement"] for u in updates)
+    
+    if any("ghazala" in u["Lieu"].lower() for u in updates):
+        location = "Ghazala"
+    elif any("ariana" in u["Lieu"].lower() for u in updates):
+        location = "Ariana"
+    elif any("tunis" in u["Lieu"].lower() for u in updates):
+        location = "Tunis"
+    else:
+        location = "on the way"
+    
+    return {
+        "package_number": pkg_number,
+        "orders": package_orders,
+        "updates": updates,
+        "location": location,
+        "delivered": delivered,
+        "is_today": is_today,
+        "last_update_date": last_update_date
+    }
 
 
 def load_packages_from_file(path="package_list.json"):
