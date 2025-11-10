@@ -10,7 +10,7 @@ def format_single_package_detail(package_result):
     
     # Package number
     pkg_number = package_result.get("package_number", "N/A")
-    output.append(f"📋 Tracking: `{pkg_number}`")
+    output.append(f"📋 Tracking: {pkg_number}")
     output.append("")
     
     # All orders
